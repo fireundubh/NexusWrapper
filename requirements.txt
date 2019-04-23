@@ -1,12 +1,12 @@
 args==0.1.0
-certifi==2018.11.29
+certifi==2019.3.9
 chardet==3.0.4
 clint==0.5.1
 idna==2.8
 mccabe==0.6.1
-pycodestyle==2.4.0
-pyflakes==2.0.0
+pycodestyle==2.5.0
+pyflakes==2.1.1
 requests==2.21.0
 urllib3==1.24.1
 websockets==7.0
-feedparser
+feedparser==5.2.1

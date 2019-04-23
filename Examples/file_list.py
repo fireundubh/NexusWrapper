@@ -1,7 +1,7 @@
-from pprint import pprint as print
+from pprint import pprint
 
-from nexuswrapper.nexus import Nexus
+from NexusWrapper.nexus import Nexus
 
 nexus = Nexus()
-mod = nexus.file_list("Fallout76", "84")
-print(mod)
+mod = nexus.file_list('Fallout76', 84)
+pprint(mod)

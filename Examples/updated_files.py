@@ -1,7 +1,7 @@
-from pprint import pprint as print
+from pprint import pprint
 
-from nexuswrapper.nexus import Nexus
+from NexusWrapper.nexus import Nexus
 
 nexus = Nexus()
-mods = nexus.updated_files("fallout4")
-print(mods)
+mods = nexus.updated_files('Fallout4')
+pprint(mods)

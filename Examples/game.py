@@ -1,7 +1,7 @@
-from pprint import pprint as print
+from pprint import pprint
 
-from nexuswrapper.nexus import Nexus
+from NexusWrapper.nexus import Nexus
 
 nexus = Nexus()
-game = nexus.game("Fallout76")
-print(game)
+game = nexus.game('Fallout76')
+pprint(game)

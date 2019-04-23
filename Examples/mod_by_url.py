@@ -1,9 +1,7 @@
-from pprint import pprint as print
+from pprint import pprint
 
-from nexuswrapper.nexus import Nexus
+from NexusWrapper.nexus import Nexus
 
 nexus = Nexus()
-mod = nexus.mod_by_url("https://www.nexusmods.com/fallout76/mods/84")
-print(mod)
-
-
+mod = nexus.mod_by_url('https://www.nexusmods.com/fallout76/mods/84')
+pprint(mod)

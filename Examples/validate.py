@@ -1,6 +1,6 @@
-from pprint import pprint as print
+from pprint import pprint
 
-from nexuswrapper.nexus import Nexus
+from NexusWrapper.nexus import Nexus
 
 nexus = Nexus()
-print(nexus.validate())
+pprint(nexus.validate())

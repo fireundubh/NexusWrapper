@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import os
 import json
 import time
 import uuid
@@ -11,148 +12,170 @@ import websockets
 from clint.textui import progress
 
 
-class Nexus():
-    def __init__(self):
+class Nexus:
+    def __init__(self, *, api_key: str = '', cfg_file_path: str = '', game_name: str = ''):
         self.session = requests.Session()
-        self.api_key = ""
-        self.BASE_URL = "https://api.nexusmods.com/v1/"
-        try:
-            with open('nexus.json', 'r') as fh:
-                nexus_data = json.load(fh)
-                self.api_key = nexus_data.get('api_key')
-        except FileNotFoundError:
-            self.api_key = asyncio.get_event_loop().run_until_complete(self.get_api_key())
-            with open('nexus.json', 'w') as fh:
-                json.dump({"api_key": self.api_key}, fh, indent=4)
+        self.api_key = api_key
+        self.BASE_URL = 'https://api.nexusmods.com/v1/'
 
-        self.headers = {"content-type": "application/json", "APIKEY": self.api_key}
+        def create_cfg_file(file_path: str):
+            with open(file_path, 'w') as cfg:
+                json.dump({'api_key': self.api_key, 'game_name': game_name}, cfg, indent=4)
 
-    async def get_api_key(self):
+        self.cfg_file_path = cfg_file_path
+        if not self.cfg_file_path:
+            self.cfg_file_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'nexus.json')
+            if not os.path.exists(self.cfg_file_path):
+                create_cfg_file(self.cfg_file_path)
+
+        with open(self.cfg_file_path, 'r') as f:
+            cfg_data = json.load(f)
+
+        if not api_key:
+            self.api_key = cfg_data.get('api_key')
+            if not self.api_key:
+                self.api_key = asyncio.get_event_loop().run_until_complete(self.get_api_key())
+                create_cfg_file(self.cfg_file_path)
+
+        if not game_name:
+            self.game_name = cfg_data.get('game_name') if 'game_name' in cfg_data.keys() else ''
+
+        self.headers = {'content-type': 'application/json', 'APIKEY': self.api_key}
+
+    @staticmethod
+    async def get_api_key():
         async with websockets.connect('wss://sso.nexusmods.com') as websocket:
-            id = str(uuid.uuid4())
-            await websocket.send(json.dumps({'id': id, 'appid': 'Vortex'}))
-            webbrowser.open(f"https://www.nexusmods.com/sso?id={id}")
+            uuid4 = str(uuid.uuid4())
+            await websocket.send(json.dumps({'id': uuid4, 'appid': 'Vortex'}))
+            webbrowser.open(f'https://www.nexusmods.com/sso?id={id}')
             api_key = await websocket.recv()
             return api_key
 
-    def request_data(self, endpoint):
-        time.sleep(1)  # limit to 1 request per second
+    def request_data(self, endpoint: str, rate: int = 1) -> dict:
+        time.sleep(rate)  # limit to 1 request per second
         r = self.session.request('GET', self.BASE_URL + endpoint, headers=self.headers, timeout=30)
         return r.json()
 
-    def validate(self):
+    def validate(self) -> dict:
         """
         Validate a specific API key
         This does not update the request quota or the cached validation result so it's
         not useful for re-checking the key after a validation error.
         Tests the current one if left undefined
-        """        
-        return self.request_data("users/validate.json")
+        """
+        return self.request_data('users/validate.json')
 
-    def games(self):
+    def games(self) -> dict:
         """
         Retrieve a list of all games currently supported by Nexus Mods
         @returns list of games
         """
-        return self.request_data("games")
+        return self.request_data('games')
 
-    def game(self, game_name):
+    def game(self, game_name: str) -> dict:
         """
         Retrieve details about a specific game
         """
         self.game_name = game_name
-        return self.request_data(f"games/{game_name}")
+        return self.request_data(f'games/{game_name}')
 
-    def mod(self, game_name, mod_id):
+    def mod(self, game_name: str, mod_id: int) -> dict:
         """
         Retrieve details about a mod
         """
-        return self.request_data(f"games/{game_name}/mods/{mod_id}")
+        return self.request_data(f'games/{game_name}/mods/{mod_id}')
 
-    def file_list(self, game_name, mod_id):
+    def file_list(self, game_name: str, mod_id: int) -> dict:
         """
         Get list of all files uploaded for a mod
         """
-        return self.request_data(f"games/{game_name}/mods/{mod_id}/files")
+        return self.request_data(f'games/{game_name}/mods/{mod_id}/files')
 
-    def file_info(self, game_name, mod_id, file_id):
+    def file_info(self, game_name: str, mod_id: int, file_id: int) -> dict:
         """
         Get details about a specific file
         """
-        return self.request_data(f"games/{game_name}/mods/{mod_id}/files/{file_id}")
+        return self.request_data(f'games/{game_name}/mods/{mod_id}/files/{file_id}')
 
-    def download_link(self, game_name, mod_id, file_id):
+    def download_link(self, game_name: str, mod_id: int, file_id: int) -> dict:
         """
         Generate download links for a file
         If the user isn't premium on Nexus Mods, this requires a key that can only
         be generated on the website. The key is part of the nxm links that are generated by the "Download with Manager" buttons.
         """
-        return self.request_data(f"games/{game_name}/mods/{mod_id}/files/{file_id}/download_link")
+        return self.request_data(f'games/{game_name}/mods/{mod_id}/files/{file_id}/download_link')
 
-    def get_file_by_md5(self, game_name, md5):
+    def get_file_by_md5(self, game_name: str, md5: str) -> dict:
         """
         Find information about a file based on its md5 hash
         This can be used to find info about a file when you don't have its modid and fileid
-        Note that technically there may be multiple results for the same md5 hash, either the same
-        file uploaded in different places or (less likely) different files that just happen to have
-        the same hash.
+        Technically there may be multiple results for the same md5 hash, either the same
+        file uploaded in different places or (less likely) collisions.
         This function will return all of them, you will have to sort out from the result which file
-        you were actually looking for (e.g. by comparing size)        
+        you were actually looking for (e.g. by comparing size)
         """
-        return self.request_data(f"games/{game_name}/mods/md5_search/{md5}")
+        return self.request_data(f'games/{game_name}/mods/md5_search/{md5}')
 
-    def calc_md5(self, fname):
+    @staticmethod
+    def calc_md5(file_path: str) -> str:
         """
         Calculate the MD5 of a file
         """
         hash_md5 = hashlib.md5()
-        with open(fname, "rb") as f:
-            for chunk in iter(lambda: f.read(4096), b""):
+        with open(file_path, 'rb') as f:
+            for chunk in iter(lambda: f.read(4096), b''):
                 hash_md5.update(chunk)
         return hash_md5.hexdigest()
 
-    def mod_by_url(self, url):
+    def mod_by_url(self, url: str) -> dict:
         """
         Retrieve mod detail by full mod url
         """
         url = url.split('?', 1)[0]
-        game_name = url.split("/")[3]
-        mod_id = url.split(f"/{game_name}/mods/", 1)[1]
-        mod_id = mod_id.replace("/", "")
-        return self.mod(game_name, mod_id)
+        game_name = url.split('/')[3]
+        mod_id = url.split(f'/{game_name}/mods/', 1)[1]
+        mod_id = mod_id.replace('/', '')
+        return self.mod(game_name, int(mod_id) if mod_id and mod_id.isdigit() else 0)
 
-    def download_file(self, uri, fname):
+    def download_file(self, uri: str, file_path: str, rate: int = 1) -> None:
         """
         Downloads a specific file
         """
-        time.sleep(1)  # limit to 1 request per second
+        time.sleep(rate)  # limit to 1 request per second
         r = self.session.request('GET', uri, stream=True)
-        with open(fname, 'wb') as f:
+        with open(file_path, 'wb') as f:
             total_length = int(r.headers.get('content-length'))
             for chunk in progress.bar(r.iter_content(chunk_size=1024), expected_size=(total_length / 1024) + 1):
                 if chunk:
                     f.write(chunk)
                     f.flush()
 
-    def search(self, search_term, game_id=None):
+    def search(self, search_term: str, game_id: int = 0, rate: int = 1) -> dict:
         """
         Retrieve a list of mods based on the search_term
         """
-        URL = f"https://search.nexusmods.com/mods?terms={search_term}&game_id={game_id}".replace(" ", ",")
-        time.sleep(1)  # limit to 1 request per second
-        r = self.session.request('GET', URL, timeout=30)
+        query = search_term.replace(' ', ',')
+        url = f'https://search.nexusmods.com/mods?terms={query}'
+        if game_id > 0:
+            url = url + f'&game_id={game_id}'
+        time.sleep(rate)  # limit to 1 request per second
+        r = self.session.request('GET', url, timeout=30)
         return r.json()
 
-    def new_files(self, game_name=None):
+    @staticmethod
+    def new_files(game_name: str = '') -> feedparser.FeedParserDict:
         """
         Retrieve new files uploaded on nexus for the specified game.
         If no game is specified then it will retrieve all games
         """
-        return feedparser.parse(f"https://www.nexusmods.com/{game_name}/rss/newtoday")
+        rss = f'{game_name}/rss' if game_name else 'rss'
+        return feedparser.parse(f'https://www.nexusmods.com/{rss}/newtoday')
 
-    def updated_files(self, game_name=None):
+    @staticmethod
+    def updated_files(game_name: str = '') -> feedparser.FeedParserDict:
         """
         Retrieve updated files uploaded on nexus for the specified game.
         If no game is specified then it will retrieve all games
         """
-        return feedparser.parse(f"https://www.nexusmods.com/{game_name}/rss/updatedtoday")        
+        rss = f'{game_name}/rss' if game_name else 'rss'
+        return feedparser.parse(f'https://www.nexusmods.com/{rss}/updatedtoday')
